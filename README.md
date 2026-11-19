@@ -6,6 +6,21 @@
 
 ---
 
+## Thông tin học viên
+
+| Thông tin | Giá trị |
+|---|---|
+| Họ và tên | Trần Nguyễn Anh Phong |
+| MSSV | 2A202603629 |
+| Khóa / lớp | K5 / L3A |
+| GitHub | [anhphongtrng](https://github.com/anhphongtrng) |
+| Ngày thực hiện | 19/11/2026 |
+| Hình thức | Cá nhân |
+
+> Phần hướng dẫn gốc bên dưới được giữ nguyên. Cấu hình thực tế và kết quả thực hiện của học viên được trình bày tại [mục 4](#4-thực-hiện-bài-lab) và [mục 5](#5-kết-quả-thực-nghiệm).
+
+---
+
 ## Thời lượng
 
 | Phần | Thời gian |
@@ -162,3 +177,119 @@ pip install -r requirements.txt
 Rồi mở [`CHECKPOINTS.md`](CHECKPOINTS.md) và làm lần lượt Checkpoint 1 → 5.
 
 Nộp theo [`SUBMISSION.md`](SUBMISSION.md) · Quy định: [`RULES.md`](RULES.md).
+
+
+---
+
+## 4. Thực hiện bài lab
+
+### 4.1. Môi trường và cấu hình thực tế (CP1)
+
+- Windows, PowerShell, Python 3.12.10, môi trường `.venv`.
+- Google ADK 2.14.1, Google GenAI 2.34.0, NeMo Guardrails 0.24.1 và OpenAI SDK.
+- Framework: `python-openai-sdk-adk-plugins`.
+- Blue sử dụng API Liquid AI trực tiếp theo hướng dẫn bổ sung của giảng viên. Red và Red Advance sử dụng GPT-4o-mini qua OpenRouter sau khi Gemini trả lỗi 503.
+
+| Agent | Endpoint | Model thực tế |
+|---|---|---|
+| Blue | `https://api.liquid.ai/openai/v1` | `lfm3-1.7b` |
+| Red / Red Advance | `https://openrouter.ai/api/v1` | `openai/gpt-4o-mini` |
+
+Tại thư mục gốc repository, chạy:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Chỉ sao chép `.env.example` khi chưa có `.env`. Điền cấu hình sau bằng API key hợp lệ của mình:
+
+```dotenv
+OPENROUTER_API_KEY=<LIQUID_API_KEY>
+OPENROUTER_BASE_URL=https://api.liquid.ai/openai/v1
+RED_TEAM_PROVIDER=openai
+OPENAI_API_KEY=<OPENROUTER_API_KEY>
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=openai/gpt-4o-mini
+NEMO_GUARDRAILS_NO_USAGE_STATS=1
+```
+
+Trong `src/core/config.py`, cấu hình `BLUE_MODEL = "lfm3-1.7b"`. Tên biến môi trường và nhãn provider Blue vẫn giữ theo starter code để tương thích với runtime. Không commit `.env`, `.venv` hoặc API key thật.
+
+### 4.2. Các phần đã triển khai
+
+| Checkpoint | Nội dung thực hiện |
+|---|---|
+| CP1 | Thiết lập Python 3.12, cài dependencies, kiểm tra kết nối API và smoke tests. |
+| CP2 | Chuẩn hóa Unicode, phát hiện prompt injection, topic filter, input plugin, lọc PII/secret và output plugin. |
+| CP3 | Sliding-window rate limiter, audit log, monitoring, egress allowlist và bộ kiểm thử pipeline. |
+| CP4 | Năm adversarial prompts theo các nhóm completion, reformatting, hypothetical, confirmation và multi-step; chạy trên Red và Red Advance. |
+| CP5 | Kiểm thử tự động, xác thực schema, chạy grader và sinh báo cáo. |
+
+### 4.3. Cấu trúc các file liên quan
+
+```text
+.
+├── .env.example                       # Mẫu cấu hình
+├── requirements.txt                   # Dependencies
+├── src/
+│   ├── main.py                        # Entry point theo checkpoint
+│   ├── core/config.py                 # Cấu hình model Blue
+│   ├── guardrails/
+│   │   ├── input_guardrails.py         # Injection detection, topic filter
+│   │   └── output_guardrails.py        # PII/secret redaction
+│   ├── assignment/
+│   │   ├── rate_limiter.py             # Sliding window theo user
+│   │   ├── audit_log.py                # Nhật ký request/response
+│   │   ├── monitoring.py               # Metrics và cảnh báo
+│   │   └── pipeline.py                 # Tích hợp và egress policy
+│   └── attacks/attacks.py              # 5 adversarial prompts
+├── data/protected/vinbank_secrets.json # Secret giả lập của lab
+├── schemas/results.schema.json        # Schema kết quả CP3
+├── tests/
+│   ├── smoke/                         # Smoke tests
+│   └── public/                        # Public contract tests
+├── scripts/grade.py                   # Grader và auto report
+└── outputs/
+    ├── results.json                   # Kết quả Blue Team
+    ├── audit_log.json                 # Nhật ký kiểm thử
+    ├── metrics.json                   # Số liệu giám sát
+    ├── attack_results.json            # Tổng hợp Red Team
+    ├── unsafe_attack_result.json      # Red
+    ├── guards_attack_result.json      # Red Advance
+    ├── grade_report.json              # Kết quả grader
+    └── lab_report.md                  # Báo cáo tự sinh
+```
+
+### 4.4. Cách chạy
+
+Chạy từ thư mục gốc, sau khi kích hoạt `.venv` và cấu hình API key:
+
+```powershell
+# CP1
+python --version
+pytest tests/smoke -q
+
+# CP2
+python src/guardrails/input_guardrails.py
+python src/guardrails/output_guardrails.py
+python src/main.py --part 2
+
+# CP3
+python src/main.py --part 3
+pytest tests/public/test_results_contract.py -q
+
+# CP4
+python src/main.py --part 4
+
+# CP5
+pytest tests/smoke -q
+pytest tests/public -q
+python scripts/grade.py --submission-dir . --out outputs/grade_report.json
+```
+
+CP3 và CP4 cần kết nối API; việc chạy lại có thể ghi đè artifact và phát sinh chi phí. Không chỉnh sửa thủ công các file kết quả hoặc báo cáo tự sinh.
+
